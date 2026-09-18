@@ -1,73 +1,72 @@
-Bot Python qui surveille le taux de change USD→TRY en temps réel, l'enregistre dans une base de données locale, et envoie des alertes Telegram lorsqu'un seuil critique est dépassé.
+Python bot that monitors the USD→TRY exchange rate in real time, logs it to a local database, and sends Telegram alerts when a critical threshold is crossed.
 
-## Pourquoi ce projet
+## Why this project
 
-Après mon arrivée en Turquie en octobre 2025 grâce à la bourse Türkiye Bursları, j'ai converti le peu de dollars que j'avais en livres turques (TRY). Au bout de six mois, l'inflation locale avait fait perdre une part significative de la valeur de cet argent.
+After arriving in Turkey in October 2025 on the Türkiye Bursları scholarship, I converted the little USD I had into Turkish lira (TRY). Within six months, local inflation had eroded a significant share of that money's value.
 
-Vivant dans un pays qui fonctionne en TRY, il est impossible d'éviter totalement les échanges de devises au quotidien — garder son argent exclusivement en dollars n'est pas une option viable. Ce bot est né de ce constat : plutôt que de subir passivement les fluctuations du marché USD/TRY, j'ai voulu être notifié en temps réel de son évolution afin de prendre des décisions d'échange plus informées, et ainsi limiter l'impact de l'inflation sur mon budget.
+Living in a country that runs on TRY, it's impossible to fully avoid currency exchanges on a daily basis — holding money exclusively in USD isn't a realistic option. This bot came out of that experience: instead of passively riding the USD/TRY market's swings, I wanted real-time notifications on its movement to make more informed exchange decisions and limit inflation's impact on my budget.
 
-**Prochaine étape** : développer un modèle de prédiction pour identifier les meilleurs moments pour échanger, dans le but de minimiser les frais et pertes liés au taux de change.
+**Next step**: build a prediction model to identify the best moments to exchange, minimizing fees and losses tied to the exchange rate.
 
-## Fonctionnalités
+## Features
 
-- Récupération du taux de change USD→TRY via [ExchangeRate-API](https://www.exchangerate-api.com/)
-- Historisation des taux dans une base SQLite locale
-- Notifications automatiques via Telegram :
-  - Un point régulier sur le taux actuel
-  - Une alerte dédiée si le taux dépasse un seuil configurable
+- Fetches the USD→TRY exchange rate via [ExchangeRate-API](https://www.exchangerate-api.com/)
+- Logs historical rates to a local SQLite database
+- Automatic Telegram notifications:
+  - A regular update on the current rate
+  - A dedicated alert when the rate crosses a configurable threshold
 
-## Stack technique
+## Tech stack
 
 - Python 3
-- [`requests`](https://pypi.org/project/requests/) — appels API
-- [`python-dotenv`](https://pypi.org/project/python-dotenv/) — gestion des variables d'environnement
-- `sqlite3` — stockage local (bibliothèque standard)
+- [`requests`](https://pypi.org/project/requests/) — API calls
+- [`python-dotenv`](https://pypi.org/project/python-dotenv/) — environment variable management
+- `sqlite3` — local storage (standard library)
 
 ## Installation
 
-1. Clonez le repo :
+1. Clone the repo:
 ```bash
    git clone https://github.com/derrickjannato/TRY-USD-bot.git
    cd TRY-USD-bot
 ```
 
-2. Installez les dépendances :
+2. Install dependencies:
 ```bash
    pip install -r requirements.txt
 ```
 
-3. Créez un fichier `.env` à la racine du projet (voir `.env.example`) et renseignez vos clés :
+3. Create a `.env` file in the project root (see `.env.example`) and fill in your keys:
 
-EXCHANGERATE_API_KEY=votre_cle_api
-TELEGRAM_TOKEN=votre_token_bot_telegram
-TELEGRAM_CHAT_ID=votre_chat_id
+EXCHANGERATE_API_KEY=your_api_key
+TELEGRAM_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
 SEUIL_ALERTE=50.0
 
 
-## Utilisation
+## Usage
 
 ```bash
 python script.py
 ```
 
-Le script peut être lancé manuellement ou planifié (ex: via `cron` sur Linux/Mac ou le Planificateur de tâches sur Windows) pour un suivi automatique régulier.
+The script can be run manually or scheduled (e.g. via `cron` on Linux/Mac or Task Scheduler on Windows) for automatic periodic tracking.
 
-## Comment lire le taux USD/TRY
+## How to read the USD/TRY rate
 
-Le taux affiché indique **combien de TRY il faut pour obtenir 1 USD**. Sa direction détermine la meilleure action à prendre :
+The rate shown indicates **how many TRY it takes to buy 1 USD**. Its direction determines the best action to take:
 
-- **Le taux monte** (ex: 48 → 50) → le TRY **s'affaiblit** face au dollar. C'est le bon moment pour **convertir du USD vers du TRY** si vous devez dépenser en lires — vous en obtenez davantage pour le même montant en dollars.
-- **Le taux baisse** (ex: 50 → 48) → le TRY **se renforce**. C'est le bon moment pour **acheter des dollars** (convertir du TRY vers du USD) si vous voulez épargner ou préserver de la valeur.
+- **Rate goes up** (e.g. 48 → 50) → TRY **weakens** against the dollar. It's a good time to **convert USD to TRY** if you need to spend in lira — you get more lira for the same amount of dollars.
+- **Rate goes down** (e.g. 50 → 48) → TRY **strengthens**. It's a good time to **buy dollars** (convert TRY to USD) if you want to save or preserve value.
 
-En résumé : **taux haut → vendre des dollars** ; **taux bas → acheter des dollars**.
+In short: **high rate → sell dollars**; **low rate → buy dollars**.
 
-## Structure du projet
+## Project structure
 
 TRY-USD-bot/
-├── script.py # Script principal
-├── taux_change.db # Base de données SQLite (générée automatiquement)
-├── .env # Variables d'environnement (non versionné)
-├── .env.example # Modèle de configuration
-├── requirements.txt # Dépendances Python
+├── script.py # Main script
+├── taux_change.db # SQLite database (auto-generated)
+├── .env # Environment variables (not versioned)
+├── .env.example # Configuration template
+├── requirements.txt # Python dependencies
 └── README.md
-
