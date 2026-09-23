@@ -1,2 +1,4 @@
 .env
 taux_change.db
+__pycache__/
+taux_graph.png
