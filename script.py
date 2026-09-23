@@ -1,114 +1,123 @@
 from dotenv import load_dotenv
 load_dotenv()
+ 
 import os
+import logging
 import requests
-import sqlite3
-from datetime import datetime, timezone
-
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+ 
+from database import init_db, inserer_taux, get_dernier_taux
+from graph import generer_graphe
+from prediction import predire_tendance, formater_prediction
+ 
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+ 
 # --- Configuration ---
-DB_PATH = "taux_change.db"
 API_KEY = os.environ.get("EXCHANGERATE_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-
-# Le seuil est maintenant configurable via variable d'environnement,
-# avec 50.0 comme valeur par défaut si tu n'en définis pas.
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")  # utilisé pour les notifs automatiques
 SEUIL_ALERTE = float(os.environ.get("SEUIL_ALERTE", 50.0))
-
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS taux (
-            date_heure TEXT,
-            devise TEXT,
-            taux REAL,
-            source TEXT
-        )
-    """)
-    conn.commit()
-    return conn
-
-
-def get_taux_try_usd():
+INTERVALLE_NOTIF_SECONDES = int(os.environ.get("INTERVALLE_NOTIF_SECONDES", 6 * 3600))
+ 
+conn = init_db()
+ 
+ 
+def get_taux_try_usd() -> float:
     if not API_KEY:
         raise ValueError("Clé API manquante : définis EXCHANGERATE_API_KEY")
-
+ 
     url = f"https://v6.exchangerate-api.com/v6/{API_KEY}/latest/USD"
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     data = resp.json()
-
+ 
     if data.get("result") != "success":
         raise RuntimeError(f"Réponse API inattendue : {data}")
-
+ 
     return data["conversion_rates"]["TRY"]
-
-
-def get_dernier_taux(conn, devise="TRY"):
-    cur = conn.execute(
-        "SELECT taux FROM taux WHERE devise = ? ORDER BY date_heure DESC LIMIT 1",
-        (devise,)
-    )
-    row = cur.fetchone()
-    return row[0] if row else None
-
-
-def inserer_taux(conn, taux, devise="TRY", source="exchangerate-api.com"):
-    now = datetime.now(timezone.utc).isoformat()
-    conn.execute(
-        "INSERT INTO taux (date_heure, devise, taux, source) VALUES (?, ?, ?, ?)",
-        (now, devise, taux, source)
-    )
-    conn.commit()
-
-
-def envoyer_telegram(message):
-    """Envoie un message via le bot Telegram. Ne plante pas le script si ça échoue."""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram non configuré (token ou chat_id manquant) — message non envoyé.")
-        return
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    try:
-        resp = requests.post(
-            url,
-            data={"chat_id": TELEGRAM_CHAT_ID, "text": message},
-            timeout=10
-        )
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        # On log l'erreur mais on ne fait pas planter tout le script pour ça
-        print(f"Erreur lors de l'envoi Telegram : {e}")
-
-
-def main():
-    conn = init_db()
-    taux_actuel = get_taux_try_usd()
+ 
+ 
+def enregistrer_si_nouveau(taux: float) -> None:
     dernier = get_dernier_taux(conn)
-
-    print(f"Taux actuel USD→TRY : {taux_actuel}")
-    print(f"Dernier taux stocké : {dernier}")
-    print(f"Seuil d'alerte configuré : {SEUIL_ALERTE}")
-
-    if dernier is None or abs(taux_actuel - dernier) > 0.0001:
-        inserer_taux(conn, taux_actuel)
-        print("Nouvelle valeur insérée.")
-    else:
-        print("Taux inchangé, rien à insérer.")
-
-    # --- Message systématique toutes les 6h (peu importe si ça a changé) ---
-    message = f"💱 Point USD→TRY : {taux_actuel:.4f}"
-    envoyer_telegram(message)
-
-    # --- Alerte séparée si le seuil est dépassé ---
-    if taux_actuel >= SEUIL_ALERTE:
-        message_alerte = f"⚠️ Seuil dépassé ! TRY/USD a atteint {taux_actuel:.4f} (seuil : {SEUIL_ALERTE})"
-        print(message_alerte)
-        envoyer_telegram(message_alerte)
-
-    conn.close()
-
-
+    if dernier is None or abs(taux - dernier) > 0.0001:
+        inserer_taux(conn, taux)
+ 
+ 
+# --- Commandes ---
+ 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    taux = get_taux_try_usd()
+    enregistrer_si_nouveau(taux)
+    await update.message.reply_text(f"💱 Taux actuel USD→TRY : {taux:.4f}")
+ 
+ 
+async def graphe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chemin = generer_graphe(conn)
+    if chemin is None:
+        await update.message.reply_text("Pas encore assez de données pour tracer un graphe.")
+        return
+    with open(chemin, "rb") as f:
+        await update.message.reply_photo(photo=f, caption="📊 Évolution du taux USD/TRY")
+ 
+ 
+async def prediction(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    resultat = predire_tendance(conn)
+    await update.message.reply_text(formater_prediction(resultat))
+ 
+ 
+# --- Job périodique (toutes les 6h, indépendamment de l'utilisateur) ---
+ 
+async def notification_periodique(context: ContextTypes.DEFAULT_TYPE):
+    if not TELEGRAM_CHAT_ID:
+        logger.warning("TELEGRAM_CHAT_ID non configuré, notification périodique ignorée.")
+        return
+ 
+    taux = get_taux_try_usd()
+    enregistrer_si_nouveau(taux)
+ 
+    message = f"💱 Point USD→TRY : {taux:.4f}"
+    await context.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+ 
+    chemin = generer_graphe(conn)
+    if chemin:
+        with open(chemin, "rb") as f:
+            await context.bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=f)
+ 
+    resultat = predire_tendance(conn)
+    await context.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=formater_prediction(resultat))
+ 
+    if taux >= SEUIL_ALERTE:
+        await context.bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=f"⚠️ Seuil dépassé ! USD/TRY a atteint {taux:.4f} (seuil : {SEUIL_ALERTE})"
+        )
+ 
+ 
+def main():
+    if not TELEGRAM_TOKEN:
+        raise ValueError("TELEGRAM_TOKEN manquant dans les variables d'environnement.")
+ 
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+ 
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("graphe", graphe))
+    app.add_handler(CommandHandler("prediction", prediction))
+ 
+    # Notification toutes les 6h, dès le lancement (first=0)
+    app.job_queue.run_repeating(
+        notification_periodique,
+        interval=INTERVALLE_NOTIF_SECONDES,
+        first=0
+    )
+ 
+    logger.info("Bot démarré, en écoute...")
+    app.run_polling()
+ 
+ 
 if __name__ == "__main__":
     main()
