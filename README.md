@@ -38,5 +38,7 @@ Rate goes up (e.g. 48 → 50) → TRY weakens against the dollar. It's a good ti
 Rate goes down (e.g. 50 → 48) → TRY strengthens. It's a good time to buy dollars (convert TRY to USD) if you want to save or preserve value.
 In short: high rate → sell dollars; low rate → buy dollars.
 
-Project structure
-TRY-USD-bot/ ├── script.py # Main script ├── taux_change.db # SQLite database (auto-generated) ├── .env # Environment variables (not versioned) ├── .env.example # Configuration template ├── requirements.txt # Python dependencies └── README.md
+
+
+<img width="1327" height="91" alt="image" src="https://github.com/user-attachments/assets/9a9b50c0-62fa-47a2-9a73-746fe552d04f" />
+
