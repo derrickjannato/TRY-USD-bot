@@ -40,5 +40,5 @@ In short: high rate → sell dollars; low rate → buy dollars.
 
 
 
-<img width="1327" height="91" alt="image" src="https://github.com/user-attachments/assets/9a9b50c0-62fa-47a2-9a73-746fe552d04f" />
+<img width="618" height="1280" alt="WhatsApp Image 2026-09-30 at 01 00 05" src="https://github.com/user-attachments/assets/73277c01-e0b6-4621-97ab-a7a4d4c626a2" />
 
